@@ -6,3 +6,7 @@ authors = ["Aaron Weiss <aaronweiss74@gmail.com>"]
 
 [dependencies.mio]
 git = "https://github.com/carllerche/mio"
+
+[dependencies.openssl]
+openssl = "*"
+optional = true
