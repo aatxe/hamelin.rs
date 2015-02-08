@@ -1,13 +1,13 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(core, env, io, os, std_misc)]
+#![cfg_attr(feature = "openssl", feature(core, env, io, os, std_misc))]
 extern crate hamelin;
 #[cfg(feature = "openssl")] extern crate openssl;
 
-use std::env::args;
-use std::old_io::{Acceptor, BufferedStream, Listener, TcpListener};
-use std::sync::Arc;
-use std::thread::Thread;
-use hamelin::Hamelin;
+#[cfg(feature = "openssl")] use std::env::args;
+#[cfg(feature = "openssl")] use std::old_io::{Acceptor, BufferedStream, Listener, TcpListener};
+#[cfg(feature = "openssl")] use std::sync::Arc;
+#[cfg(feature = "openssl")] use std::thread::Thread;
+#[cfg(feature = "openssl")] use hamelin::Hamelin;
 #[cfg(feature = "openssl")] use openssl::ssl::{SslContext, SslMethod, SslStream};
 
 #[cfg(feature = "openssl")]

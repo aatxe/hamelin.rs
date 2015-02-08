@@ -22,8 +22,7 @@ fn main() {
     let listener = TcpListener::bind(&format!("{}:{}", args[0], args[1])[]);
     let mut acceptor = listener.listen();
     for stream in acceptor.incoming() {
-        let mut stream = stream.unwrap();
-        stream.set_timeout(Some(1));
+        let stream = stream.unwrap();
         let hamelin = hamelin.clone();
         Thread::spawn(move || {
             let mut stream = BufferedStream::new(stream);
