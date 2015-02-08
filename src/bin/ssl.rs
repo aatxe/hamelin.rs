@@ -1,4 +1,4 @@
-//! A TCP socket implementation of Hamelin.
+//! An SSL implementation of Hamelin.
 #![cfg_attr(feature = "openssl", feature(core, env, io, os, std_misc))]
 extern crate hamelin;
 #[cfg(feature = "openssl")] extern crate openssl;

@@ -10,12 +10,14 @@ use std::str::from_utf8;
 use std::thread::Thread;
 use mio::{IoReader, IoWriter, NonBlock, PipeReader, pipe};
 
+/// A Hamelin daemon.
 pub struct Hamelin {
     process: String,
     args: Option<Vec<String>>,
 }
 
 impl Hamelin {
+    /// Constructs a Hamelin daemon from the process and optionally arguments.
     pub fn new(process: &str, args: Option<&[String]>) -> Hamelin {
         Hamelin { 
             process: process.to_owned(), 
@@ -23,6 +25,7 @@ impl Hamelin {
         }
     }
 
+    /// Spawns a Hamelin server from the daemon.
     pub fn spawn(&self) -> IoResult<HamelinGuard> {
         let client_str = format!("{} ({:?})", self.process, self.args);
         let mut cmd = Command::new(&self.process);
@@ -36,12 +39,14 @@ impl Hamelin {
     }
 }
 
+/// A Hamelin server.
 pub struct HamelinGuard {
     process: Process,
     alr: AsyncLineReader,
 }
 
 impl HamelinGuard {
+    /// Creates a new Hamelin server from the specified process.
     pub fn new(process: Process) -> HamelinGuard {
         let (read, write) = pipe().unwrap();
         let mut pipe = process.stdout.as_ref().map(|s| s.clone()).unwrap();
@@ -58,14 +63,17 @@ impl HamelinGuard {
         }
     }
 
+    /// Writes a line to the server's stdin.
     pub fn write_line(&mut self, line: &str) -> IoResult<()> { 
         self.process.stdin.as_mut().map(|mut s| s.write_line(line)).unwrap()
     }
 
+    /// Reads a line asynchronously from the server's stdout.
     pub fn read_line(&mut self) -> IoResult<String> {
         self.alr.read_line()
     }
 
+    /// Sends a kill signal to the server.
     pub fn kill(&mut self) -> IoResult<()> {
         self.process.signal_kill()
     }
