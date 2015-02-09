@@ -4,6 +4,7 @@ extern crate hamelin;
 
 use std::env::args;
 use std::old_io::{Acceptor, BufferedStream, Listener, TcpListener};
+use std::old_io::IoErrorKind::TimedOut;
 use std::sync::Arc;
 use std::thread::Thread;
 use hamelin::Hamelin;
@@ -22,18 +23,26 @@ fn main() {
     let listener = TcpListener::bind(&format!("{}:{}", args[0], args[1])[]);
     let mut acceptor = listener.listen();
     for stream in acceptor.incoming() {
-        let stream = stream.unwrap();
+        let mut stream = stream.unwrap();
+        stream.set_timeout(Some(1));
         let hamelin = hamelin.clone();
         Thread::spawn(move || {
             let mut stream = BufferedStream::new(stream);
             let mut guard = hamelin.spawn().unwrap();
             loop {
-                if let Ok(line) = stream.read_line() { 
-                    let _ = guard.write_line(&line);
-                }
                 if let Ok(line) = guard.read_line() {
                     let _ = stream.write_line(&line);
                     let _ = stream.flush();
+                }
+                match stream.read_line() {
+                    Ok(line) => {
+                        let _ = guard.write_line(&line);
+                    },
+                    Err(ref e) if e.kind != TimedOut => {
+                        let _ = guard.kill();
+                        break;
+                    },
+                    _ => ()
                 }
             }
         });

@@ -53,8 +53,13 @@ impl HamelinGuard {
         Thread::spawn(move || {
             let mut buf = [0; 100];
             loop {
-                let len = pipe.read(&mut buf).unwrap();
-                write.write_slice(&mut buf[..len]).unwrap();
+                match pipe.read(&mut buf) {
+                    Ok(len) => {
+                        write.write_slice(&mut buf[..len]).unwrap();
+                    },
+                    Err(ref e) if e.kind != IoErrorKind::TimedOut => break,
+                    _ => (),
+                }
             }
         });
         HamelinGuard {
@@ -75,6 +80,11 @@ impl HamelinGuard {
 
     /// Sends a kill signal to the server.
     pub fn kill(&mut self) -> IoResult<()> {
+        try!(self.process.signal_exit());
+        self.process.set_timeout(Some(1000));
+        if let Ok(_) = self.process.wait() {
+            return Ok(())
+        }
         self.process.signal_kill()
     }
 }

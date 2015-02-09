@@ -26,18 +26,20 @@ fn main() {
     let mut acceptor = listener.listen();
     for stream in acceptor.incoming() {
         let ctx = SslContext::new(SslMethod::Sslv23).unwrap();
-        let stream = SslStream::new_server(&ctx, stream.unwrap()).unwrap();
+        let mut stream = stream.unwrap();
+        stream.set_timeout(Some(1));
+        let stream = SslStream::new_server(&ctx, stream).unwrap();
         let hamelin = hamelin.clone();
         Thread::spawn(move || {
             let mut stream = BufferedStream::new(stream);
             let mut guard = hamelin.spawn().unwrap();
             loop {
-                if let Ok(line) = stream.read_line() { 
-                    let _ = guard.write_line(&line);
-                }
                 if let Ok(line) = guard.read_line() {
                     let _ = stream.write_line(&line);
                     let _ = stream.flush();
+                }
+                if let Ok(line) = stream.read_line() { 
+                    let _ = guard.write_line(&line);
                 }
             }
         });
