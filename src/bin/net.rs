@@ -1,5 +1,5 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(core, env, io, os, std_misc)]
+#![feature(env, io, std_misc)]
 extern crate hamelin;
 
 use std::env::args;
@@ -10,7 +10,7 @@ use std::thread::Thread;
 use hamelin::Hamelin;
 
 fn main() {
-    let args: Vec<_> = args().skip(1).map(|s| s.into_string().unwrap()).collect();
+    let args: Vec<_> = args().skip(1).collect();
     if args.len() < 3 {
         println!("Usage: hamelin host port command [args]");
         return;

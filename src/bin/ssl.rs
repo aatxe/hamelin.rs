@@ -1,5 +1,5 @@
 //! An SSL implementation of Hamelin.
-#![cfg_attr(feature = "openssl", feature(core, env, io, os, std_misc))]
+#![cfg_attr(feature = "openssl", feature(env, io, std_misc))]
 extern crate hamelin;
 #[cfg(feature = "openssl")] extern crate openssl;
 
@@ -12,7 +12,7 @@ extern crate hamelin;
 
 #[cfg(feature = "openssl")]
 fn main() {
-    let args: Vec<_> = args().skip(1).map(|s| s.into_string().unwrap()).collect();
+    let args: Vec<_> = args().skip(1).collect();
     if args.len() < 3 {
         println!("Usage: hamelin host port command [args]");
         return;
