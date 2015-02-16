@@ -1,10 +1,11 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(env, io)]
+#![feature(env, io, std_misc)]
 extern crate hamelin;
 extern crate mio;
 
 use std::env::args;
 use std::old_io::IoErrorKind::TimedOut;
+use std::thread::Thread;
 use hamelin::{BufferedAsyncStream, Hamelin};
 use mio::{event, EventLoop, IoAcceptor, Handler, Token};
 use mio::net::{SockAddr};
@@ -45,23 +46,25 @@ impl Handler<(), ()> for HamelinHandler {
             SERVER => {
                 let mut bufstream = BufferedAsyncStream::new(self.server.accept().unwrap().unwrap());
                 let mut guard = self.hamelin.spawn().unwrap();
-                loop {
-                    if let Ok(line) = guard.read_line() {
-                        println!("Writing: {}", line);
-                        let _ = bufstream.write_line(&line);
+                Thread::spawn(move || {                
+                    loop {
+                        if let Ok(line) = guard.read_line() {
+                            println!("Writing: {}", line);
+                            let _ = bufstream.write_line(&line);
+                        }
+                        match bufstream.read_line() {
+                            Ok(line) => {
+                                println!("Read: {}", line);
+                                let _ = guard.write_line(&line);
+                            },
+                            Err(ref e) if e.kind != TimedOut => {
+                                break;
+                            },
+                            _ => ()
+                        }  
                     }
-                    match bufstream.read_line() {
-                        Ok(line) => {
-                            println!("Read: {}", line);
-                            let _ = guard.write_line(&line);
-                        },
-                        Err(ref e) if e.kind != TimedOut => {
-                            break;
-                        },
-                        _ => ()
-                    }  
-                }
-                guard.wait().unwrap();
+                    guard.wait().unwrap();
+                });
             }
             _ => panic!("unexpected token"),
         }
