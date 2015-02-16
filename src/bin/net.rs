@@ -47,7 +47,6 @@ impl Client {
         match self.guard.read_line() {
             Ok(line) => match self.stream.write_line(&line) {
                 Ok(_) => {
-                    println!("Wrote: {}", line);
                     Ok(())
                 },
                 Err(ref e) if e.kind == TimedOut => Ok(()),
