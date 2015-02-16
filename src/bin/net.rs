@@ -82,7 +82,9 @@ impl HamelinHandler {
             self.token_index += 1;
             eloop.register_opt(&client, token, Interest::all(), PollOpt::level())
                  .ok().expect("Failed to accept new client.");
-            self.clients.insert(token.as_usize(), Client::new(client, self.hamelin.spawn().unwrap()));
+            self.clients.insert(
+                token.as_usize(), Client::new(client, self.hamelin.spawn().unwrap())
+            );
             println!("Client connected.");
         }
     }
