@@ -158,6 +158,12 @@ impl<T: IoReader + IoWriter> BufferedAsyncStream<T> {
             let result = from_utf8(&self.read_buf).unwrap().to_owned();
             self.read_buf = rest;
             return Ok(result);
+        } else if let Some(_) = self.read_buf.position_elem(&4) {
+            return Err(IoError {
+                kind: IoErrorKind::EndOfFile,
+                desc: "End of File reached.",
+                detail: None,
+            });
         }
         let mut buf = [0; 100];
         match self.stream.read_slice(&mut buf) {
@@ -185,6 +191,11 @@ impl<T: IoReader + IoWriter> BufferedAsyncStream<T> {
                     }
                 }
             }
+            Err(e) if e.is_eof() => Err(IoError {
+                kind: IoErrorKind::EndOfFile,
+                desc: "End of File reached.",
+                detail: Some(format!("{:?}", e)),
+            }),
             Err(e) => Err(IoError {
                 kind: IoErrorKind::TimedOut,
                 desc: "Reading would've blocked.",
@@ -215,6 +226,11 @@ impl<T: IoReader + IoWriter> BufferedAsyncStream<T> {
                     })
                 }
             }
+            Err(e) if e.is_eof() => Err(IoError {
+                kind: IoErrorKind::EndOfFile,
+                desc: "End of File reached.",
+                detail: Some(format!("{:?}", e)),
+            }),
             Err(e) => Err(IoError {
                 kind: IoErrorKind::TimedOut,
                 desc: "Writing would've blocked.",

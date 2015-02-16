@@ -43,13 +43,13 @@ impl Handler<(), ()> for HamelinHandler {
     fn readable(&mut self, _: &mut EventLoop<(), ()>, token: Token, _: event::ReadHint) {
         match token {
             SERVER => {
-                let mut stream = BufferedAsyncStream::new(self.server.accept().unwrap().unwrap());
+                let mut bufstream = BufferedAsyncStream::new(self.server.accept().unwrap().unwrap());
                 let mut guard = self.hamelin.spawn().unwrap();
                 loop {
                     if let Ok(line) = guard.read_line() {
-                        let _ = stream.write_line(&line);
+                        let _ = bufstream.write_line(&line);
                     }
-                    match stream.read_line() {
+                    match bufstream.read_line() {
                         Ok(line) => {
                             let _ = guard.write_line(&line);
                         },
