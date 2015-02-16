@@ -95,9 +95,12 @@ impl HamelinHandler {
     }
 
     fn write(&mut self, token: usize) -> Result<(), ()> {
-        let client = &mut self.clients[token];
-        let res = client.write();
-        res
+        if let Some(ref mut client) = self.clients.get_mut(&token) {
+            let res = client.write();
+            res
+        } else {
+            Err(())
+        }
     }
 }
 
