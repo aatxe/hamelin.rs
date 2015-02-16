@@ -78,6 +78,11 @@ impl HamelinGuard {
         self.alr.read_line()
     }
 
+    /// Awaits the completion of the server.
+    pub fn wait(&mut self) -> IoResult<()> {
+        self.process.wait().map(|_| ())
+    }
+
     /// Sends a kill signal to the server.
     pub fn kill(&mut self) -> IoResult<()> {
         try!(self.process.signal_exit());

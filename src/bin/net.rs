@@ -47,19 +47,21 @@ impl Handler<(), ()> for HamelinHandler {
                 let mut guard = self.hamelin.spawn().unwrap();
                 loop {
                     if let Ok(line) = guard.read_line() {
+                        println!("Writing: {}", line);
                         let _ = bufstream.write_line(&line);
                     }
                     match bufstream.read_line() {
                         Ok(line) => {
+                            println!("Read: {}", line);
                             let _ = guard.write_line(&line);
                         },
                         Err(ref e) if e.kind != TimedOut => {
-                            let _ = guard.kill();
                             break;
                         },
                         _ => ()
                     }  
                 }
+                guard.wait().unwrap();
             }
             _ => panic!("unexpected token"),
         }
