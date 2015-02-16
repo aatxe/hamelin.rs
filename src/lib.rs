@@ -140,3 +140,86 @@ impl AsyncLineReader {
         }
     }
 }
+
+pub struct BufferedAsyncStream<T: IoReader + IoWriter> {
+    stream: T,
+    read_buf: Vec<u8>
+}
+
+impl<T: IoReader + IoWriter> BufferedAsyncStream<T> {
+    pub fn new(stream: T) -> BufferedAsyncStream<T> {
+        BufferedAsyncStream { stream: stream, read_buf: Vec::new() }
+    }
+
+    pub fn read_line(&mut self) -> IoResult<String> {
+        if let Some(pos) = self.read_buf.position_elem(&b'\n') {
+            let mut rest = self.read_buf.split_off(pos);
+            rest.remove(0);
+            let result = from_utf8(&self.read_buf).unwrap().to_owned();
+            self.read_buf = rest;
+            return Ok(result);
+        }
+        let mut buf = [0; 100];
+        match self.stream.read_slice(&mut buf) {
+            Ok(NonBlock::WouldBlock) => Err(IoError {
+                kind: IoErrorKind::TimedOut,
+                desc: "Reading would've blocked.",
+                detail: None,
+            }),
+            Ok(NonBlock::Ready(size)) => {  
+                self.read_buf.push_all(&buf[..size]);
+                match self.read_buf.position_elem(&b'\n') {
+                    Some(pos) => {
+                        let mut rest = self.read_buf.split_off(pos);
+                        rest.remove(0);
+                        let result = from_utf8(&self.read_buf).unwrap().to_owned();
+                        self.read_buf = rest;
+                        return Ok(result);
+                    }
+                    None => { 
+                        return Err(IoError {
+                            kind: IoErrorKind::TimedOut,
+                            desc: "Reading would've blocked.",
+                            detail: None,
+                        })
+                    }
+                }
+            }
+            Err(e) => Err(IoError {
+                kind: IoErrorKind::TimedOut,
+                desc: "Reading would've blocked.",
+                detail: Some(format!("{:?}", e)),
+            })
+        }
+    }
+
+    pub fn write_line(&mut self, s: &str) -> IoResult<()> {
+        match self.stream.write_slice(&s.as_bytes()) {
+            Ok(NonBlock::WouldBlock) => Err(IoError {
+                kind: IoErrorKind::TimedOut,
+                desc: "Writing would've blocked.",
+                detail: None,
+            }),
+            Ok(NonBlock::Ready(_)) => {  
+                match self.stream.write_slice(&b"\n") {
+                    Ok(NonBlock::WouldBlock) => Err(IoError {
+                        kind: IoErrorKind::TimedOut,
+                        desc: "Writing would've blocked.",
+                        detail: None,
+                    }),
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(IoError {
+                        kind: IoErrorKind::TimedOut,
+                        desc: "Writing would've blocked.",
+                        detail: Some(format!("{:?}", e)),
+                    })
+                }
+            }
+            Err(e) => Err(IoError {
+                kind: IoErrorKind::TimedOut,
+                desc: "Writing would've blocked.",
+                detail: Some(format!("{:?}", e)),
+            })   
+        }
+    }
+}
