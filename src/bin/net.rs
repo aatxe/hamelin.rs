@@ -1,17 +1,128 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(env, io, std_misc)]
+#![feature(env, io)]
 extern crate hamelin;
 extern crate mio;
 
+use std::collections::HashMap;
 use std::env::args;
 use std::old_io::IoErrorKind::TimedOut;
-use std::thread::Thread;
-use hamelin::{BufferedAsyncStream, Hamelin};
-use mio::{event, EventLoop, IoAcceptor, Handler, Token};
+use hamelin::{BufferedAsyncStream, Hamelin, HamelinGuard};
+use mio::{EventLoop, Handler, IoAcceptor, NonBlock, Token};
+use mio::event::{Interest, PollOpt, ReadHint};
 use mio::net::{SockAddr};
 use mio::net::tcp::{TcpSocket, TcpAcceptor};
 
 const SERVER: Token = Token(0);
+
+struct Client {
+    stream: BufferedAsyncStream<TcpSocket>,
+    guard: HamelinGuard,
+}
+
+impl Client {
+    fn new(sock: TcpSocket, guard: HamelinGuard) -> Client {
+        Client {
+            stream: BufferedAsyncStream::new(sock),
+            guard: guard
+        }
+    }
+
+    fn wait(&mut self) -> Result<(), ()> {
+        self.guard.wait().map_err(|_| ())
+    }
+
+    fn read(&mut self) -> Result<(), ()> {
+        match self.stream.read_line() {
+            Ok(line) => match self.guard.write_line(&line) {
+                Ok(_) => Ok(()),
+                Err(ref e) if e.kind == TimedOut => Ok(()),
+                Err(_) => Err(()),
+            },
+            Err(ref e) if e.kind == TimedOut => Ok(()),
+            Err(_) => Err(()),
+        }    
+    }
+
+    fn write(&mut self) -> Result<(), ()> {
+        match self.guard.read_line() {
+            Ok(line) => match self.stream.write_line(&line) {
+                Ok(_) => {
+                    println!("Wrote: {}", line);
+                    Ok(())
+                },
+                Err(ref e) if e.kind == TimedOut => Ok(()),
+                Err(_) => Err(()),
+            },
+            Err(ref e) if e.kind == TimedOut => Ok(()),
+            Err(_) => Err(()),
+        }
+    }
+}
+
+struct HamelinHandler {
+    server: TcpAcceptor,
+    hamelin: Hamelin,
+    token_index: usize,
+    clients: HashMap<usize, Client>,
+}
+
+impl HamelinHandler {
+    fn new(server: TcpAcceptor, hamelin: Hamelin) -> HamelinHandler {
+        HamelinHandler {
+            server: server,
+            hamelin: hamelin,
+            token_index: 1,
+            clients: HashMap::new(),
+        }
+    }
+
+    fn accept(&mut self, eloop: &mut EventLoop<(), ()>) {
+        if let NonBlock::Ready(client) = self.server.accept().unwrap() {
+            let token = mio::Token(self.token_index);
+            self.token_index += 1;
+            eloop.register_opt(&client, token, Interest::all(), PollOpt::level())
+                 .ok().expect("Failed to accept new client.");
+            self.clients.insert(token.as_usize(), Client::new(client, self.hamelin.spawn().unwrap()));
+            println!("Client connected.");
+        }
+    }
+
+    fn read(&mut self, token: usize) -> Result<(), ()> {
+        let client = &mut self.clients[token];
+        let res = client.read();
+        res
+    }
+
+    fn write(&mut self, token: usize) -> Result<(), ()> {
+        let client = &mut self.clients[token];
+        let res = client.write();
+        res
+    }
+}
+
+impl Handler<(), ()> for HamelinHandler {
+    fn readable(&mut self, eloop: &mut EventLoop<(), ()>, token: Token, _: ReadHint) {
+        match token {
+            SERVER => self.accept(eloop),
+            Token(x) => {
+                if let Err(_) = self.read(x) {
+                    eloop.deregister(&self.clients[x].stream.stream).unwrap();
+                    let _ = self.clients[x].wait();
+                    self.clients.remove(&x);
+                }
+            },
+        }
+    }
+
+    fn writable(&mut self, _: &mut EventLoop<(), ()>, token: Token) {
+        match token {
+            SERVER => (),
+            Token(x) => {
+                let _ = self.write(x);
+            }
+        }
+    }
+}
 
 fn main() {
     let args: Vec<_> = args().skip(1).collect();
@@ -30,43 +141,7 @@ fn main() {
                     .bind(&addr).unwrap()
                     .listen(256).unwrap();
     println!("Server bound on {:?}.", addr);
-    let mut event_loop = EventLoop::<(), ()>::new().unwrap();
-    event_loop.register(&server, SERVER).unwrap();
-    let _ = event_loop.run(HamelinHandler { server: server, hamelin: hamelin });
-}
-
-struct HamelinHandler {
-    server: TcpAcceptor,
-    hamelin: Hamelin,
-}
-
-impl Handler<(), ()> for HamelinHandler {
-    fn readable(&mut self, _: &mut EventLoop<(), ()>, token: Token, _: event::ReadHint) {
-        match token {
-            SERVER => {
-                let mut bufstream = BufferedAsyncStream::new(self.server.accept().unwrap().unwrap());
-                let mut guard = self.hamelin.spawn().unwrap();
-                Thread::spawn(move || {                
-                    loop {
-                        if let Ok(line) = guard.read_line() {
-                            println!("Writing: {}", line);
-                            let _ = bufstream.write_line(&line);
-                        }
-                        match bufstream.read_line() {
-                            Ok(line) => {
-                                println!("Read: {}", line);
-                                let _ = guard.write_line(&line);
-                            },
-                            Err(ref e) if e.kind != TimedOut => {
-                                break;
-                            },
-                            _ => ()
-                        }  
-                    }
-                    guard.wait().unwrap();
-                });
-            }
-            _ => panic!("unexpected token"),
-        }
-    }
+    let mut eloop = EventLoop::<(), ()>::new().unwrap();
+    eloop.register(&server, SERVER).unwrap();
+    eloop.run(HamelinHandler::new(server, hamelin)).ok().expect("Failed to execute event loop.");
 }

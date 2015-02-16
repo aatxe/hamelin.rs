@@ -147,7 +147,7 @@ impl AsyncLineReader {
 }
 
 pub struct BufferedAsyncStream<T: IoReader + IoWriter> {
-    stream: T,
+    pub stream: T,
     read_buf: Vec<u8>
 }
 
