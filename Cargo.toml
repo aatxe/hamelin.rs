@@ -11,6 +11,10 @@ readme = "README.md"
 [dependencies.mio]
 git = "https://github.com/carllerche/mio"
 
+[dependencies.irc]
+irc = "*"
+optional = true
+
 [dependencies.openssl]
 openssl = "*"
 optional = true
