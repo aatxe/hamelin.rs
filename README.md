@@ -22,3 +22,15 @@ ultrafilterability
 ultrafilterable
 unfiltered
 ```
+
+Here's an example configuration file for the IRC implementation:
+
+```json
+{
+    "nickname": "hamelin",
+    "server": "irc.pdgn.co",
+    "use_ssl": true,
+    "channels": ["#pdgn"],
+    "options": {}
+}
+```
