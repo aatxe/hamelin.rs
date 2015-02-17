@@ -34,3 +34,6 @@ Here's an example configuration file for the IRC implementation:
     "options": {}
 }
 ```
+
+The full list of available configuration options can be found 
+[here](http://aatxe.github.io/irc/irc/client/data/config/struct.Config.html).
