@@ -28,8 +28,8 @@ fn main() {
     }));   
     let cache: Arc<Mutex<HashMap<String, HamelinGuard>>> = Arc::new(Mutex::new(HashMap::new()));
     loop {
-        let irc_server = Arc::new(IrcServer::new(&args[0]).unwrap());
-                                  // .ok().expect("Failed to connect to IRC server."));
+        let irc_server = Arc::new(IrcServer::new(&args[0])
+                                  .ok().expect("Failed to connect to IRC server."));
         let server_ref = irc_server.clone();
         let cache_ref = cache.clone();
         Thread::spawn(move || { 
