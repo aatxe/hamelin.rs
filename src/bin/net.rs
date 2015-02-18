@@ -7,9 +7,8 @@ use std::collections::HashMap;
 use std::env::args;
 use std::old_io::IoErrorKind::TimedOut;
 use hamelin::{BufferedAsyncStream, Hamelin, HamelinGuard};
-use mio::{EventLoop, Handler, IoAcceptor, NonBlock, Token};
-use mio::event::{Interest, PollOpt, ReadHint};
-use mio::net::{SockAddr};
+use mio::{EventLoop, Handler, Interest, IoAcceptor, NonBlock, PollOpt, ReadHint, Token};
+use mio::net::SockAddr;
 use mio::net::tcp::{TcpSocket, TcpAcceptor};
 
 const SERVER: Token = Token(0);
