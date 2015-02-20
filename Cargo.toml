@@ -4,7 +4,7 @@ name = "hamelin"
 version = "0.0.1"
 description = "An implementation of Hamelin in Rust."
 authors = ["Aaron Weiss <aaronweiss74@gmail.com>"]
-license = "Unlicense"
+license = "CC0-1.0"
 repository = "https://github.com/aatxe/hamelin.rs"
 readme = "README.md"
 
