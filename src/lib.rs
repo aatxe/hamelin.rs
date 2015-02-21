@@ -1,5 +1,5 @@
 //! A Hamelin process-hosting backend.
-#![feature(collections, core, io, std_misc)]
+#![feature(collections, io, old_io, std_misc)]
 
 extern crate mio;
 extern crate nix;

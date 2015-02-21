@@ -22,7 +22,7 @@ fn main() {
     } else { 
         None 
     }));
-    let listener = TcpListener::bind(&format!("{}:{}", args[0], args[1])[]);
+    let listener = TcpListener::bind(&format!("{}:{}", args[0], args[1]));
     let mut acceptor = listener.listen();
     for stream in acceptor.incoming() {
         let ctx = SslContext::new(SslMethod::Sslv23).unwrap();

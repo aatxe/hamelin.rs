@@ -139,7 +139,7 @@ fn main() {
         None 
     });
     let addr = SockAddr::parse(&format!("{}:{}", if args[0] == "localhost" { "127.0.0.1" } else 
-                                        { &args[0][] }, args[1])).unwrap();
+                                        { &args[0] }, args[1])).unwrap();
     let server = TcpSocket::v4().unwrap()
                     .bind(&addr).unwrap()
                     .listen(256).unwrap();
