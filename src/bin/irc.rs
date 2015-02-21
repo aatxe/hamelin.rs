@@ -1,5 +1,5 @@
 //! An IRC implementation of Hamelin.
-#![cfg_attr(feature = "irc", feature(core, env, std_misc))]
+#![cfg_attr(feature = "irc", feature(env))]
 #[cfg(feature = "irc")] extern crate hamelin;
 #[cfg(feature = "irc")] extern crate irc;
 
@@ -7,7 +7,7 @@
 #[cfg(feature = "irc")] use std::collections::HashMap;
 #[cfg(feature = "irc")] use std::env::args;
 #[cfg(feature = "irc")] use std::sync::{Arc, Mutex};
-#[cfg(feature = "irc")] use std::thread::Thread;
+#[cfg(feature = "irc")] use std::thread::spawn;
 #[cfg(feature = "irc")] use hamelin::{Hamelin, HamelinGuard};
 #[cfg(feature = "irc")] use irc::client::data::Command;
 #[cfg(feature = "irc")] use irc::client::data::Command::PRIVMSG;
@@ -32,7 +32,7 @@ fn main() {
                                   .ok().expect("Failed to connect to IRC server."));
         let server_ref = irc_server.clone();
         let cache_ref = cache.clone();
-        Thread::spawn(move || { 
+        spawn(move || { 
             let server = Wrapper::new(&*server_ref);
             loop {
                 for (resp, guard) in cache_ref.lock().unwrap().iter_mut() {

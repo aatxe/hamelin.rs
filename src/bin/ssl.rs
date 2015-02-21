@@ -1,12 +1,12 @@
 //! An SSL implementation of Hamelin.
-#![cfg_attr(feature = "openssl", feature(env, io, std_misc))]
+#![cfg_attr(feature = "openssl", feature(env, io, old_io))]
 extern crate hamelin;
 #[cfg(feature = "openssl")] extern crate openssl;
 
 #[cfg(feature = "openssl")] use std::env::args;
 #[cfg(feature = "openssl")] use std::old_io::{Acceptor, BufferedStream, Listener, TcpListener};
 #[cfg(feature = "openssl")] use std::sync::Arc;
-#[cfg(feature = "openssl")] use std::thread::Thread;
+#[cfg(feature = "openssl")] use std::thread::spawn;
 #[cfg(feature = "openssl")] use hamelin::Hamelin;
 #[cfg(feature = "openssl")] use openssl::ssl::{SslContext, SslMethod, SslStream};
 
@@ -22,7 +22,7 @@ fn main() {
     } else { 
         None 
     }));
-    let listener = TcpListener::bind(&format!("{}:{}", args[0], args[1]));
+    let listener = TcpListener::bind(&format!("{}:{}", args[0], args[1])[..]);
     let mut acceptor = listener.listen();
     for stream in acceptor.incoming() {
         let ctx = SslContext::new(SslMethod::Sslv23).unwrap();
@@ -30,7 +30,7 @@ fn main() {
         stream.set_timeout(Some(1));
         let stream = SslStream::new_server(&ctx, stream).unwrap();
         let hamelin = hamelin.clone();
-        Thread::spawn(move || {
+        spawn(move || {
             let mut stream = BufferedStream::new(stream);
             let mut guard = hamelin.spawn().unwrap();
             loop {
