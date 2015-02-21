@@ -1,5 +1,5 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(env, io)]
+#![feature(env, old_io)]
 extern crate hamelin;
 extern crate mio;
 
@@ -139,12 +139,13 @@ fn main() {
         None 
     });
     let addr = SockAddr::parse(&format!("{}:{}", if args[0] == "localhost" { "127.0.0.1" } else 
-                                        { &args[0] }, args[1])).unwrap();
+                                        { &*args[0] }, args[1])).unwrap();
     let server = TcpSocket::v4().unwrap()
                     .bind(&addr).unwrap()
                     .listen(256).unwrap();
     println!("Server bound on {:?}.", addr);
     let mut eloop = EventLoop::<(), ()>::new().unwrap();
     eloop.register(&server, SERVER).unwrap();
-    eloop.run(HamelinHandler::new(server, hamelin)).ok().expect("Failed to execute event loop.");
+    let mut handler = HamelinHandler::new(server, hamelin);
+    eloop.run(&mut handler).ok().expect("Failed to execute event loop.");
 }
