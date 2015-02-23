@@ -56,7 +56,14 @@ fn main() {
                             message.get_source_nickname().unwrap_or(chan)
                         }.to_owned();
                         if !cache.contains_key(&resp) {
-                            cache.insert(resp.clone(), hamelin.spawn().unwrap());
+                            let client_str = format!("{}://{}:{}/{}", if server.config().use_ssl() {
+                                "ircs" } else { "irc" }, server.config().server(), 
+                                server.config().port(), resp);
+                            let env = vec![
+                                ("H-TYPE", "HAMELIN.RS-IRC-0.1"),
+                                ("H-CLIENT", &client_str)
+                            ];
+                            cache.insert(resp.clone(), hamelin.spawn_with_env(&env).unwrap());
                         }
                         let _ = cache[resp].write_line(msg);
                     }
