@@ -38,6 +38,7 @@ impl Handler for HamelinHandler {
                                                  ("H-CLIENT", &path),
                                                  ("H-URI", &path)]).unwrap();
         guard.write_line(&req.read_to_string().unwrap()).unwrap();
+        guard.eof().unwrap();
         sleep(Duration::milliseconds(100));
         let mut res = res.start().unwrap();
         while let Ok(line) = guard.read_line() {
