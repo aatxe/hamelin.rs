@@ -35,6 +35,7 @@ impl Handler for HamelinHandler {
             }
         };
         let mut guard = hamelin.spawn_with_env(&[("H-TYPE", "HAMELIN.RS-HTTP-POST-0.1"),
+                                                 ("H-CLIENT", &path),
                                                  ("H-URI", &path)]).unwrap();
         guard.write_line(&req.read_to_string().unwrap()).unwrap();
         sleep(Duration::milliseconds(100));
