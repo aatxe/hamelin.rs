@@ -13,6 +13,7 @@ use std::str::from_utf8;
 use mio::{FromIoDesc, IoDesc, IoReader, IoWriter, NonBlock, PipeReader};
 use nix::fcntl::{O_NONBLOCK, O_CLOEXEC, fcntl};
 use nix::fcntl::FcntlArg::F_SETFL;
+use nix::unistd::close;
 
 /// A Hamelin daemon.
 pub struct Hamelin {
@@ -81,6 +82,16 @@ impl HamelinGuard {
     /// Reads a line asynchronously from the server's stdout.
     pub fn read_line(&mut self) -> IoResult<String> {
         self.alr.read_line()
+    }
+
+    /// Closes the server's stdin.
+    pub fn eof(&mut self) -> IoResult<()> {
+        self.process.stdin.as_ref().map(|s| close(s.as_raw_fd())).unwrap().map_err(|e| 
+        IoError {
+            kind: IoErrorKind::IoUnavailable,
+            desc: "Failed to close stdin.",
+            detail: Some(format!("{:?}", e)),
+        })
     }
 
     /// Awaits the completion of the server.
