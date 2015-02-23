@@ -1,5 +1,5 @@
 //! A Hamelin process-hosting backend.
-#![feature(collections, io, old_io, std_misc)]
+#![feature(collections, io, old_io, old_path, std_misc)]
 
 extern crate mio;
 extern crate nix;
@@ -7,6 +7,7 @@ extern crate nix;
 use std::borrow::ToOwned;
 use std::old_io::{IoError, IoErrorKind, IoResult};
 use std::old_io::process::{Command, Process};
+use std::old_path::BytesContainer;
 use std::os::unix::AsRawFd;
 use std::str::from_utf8;
 use mio::{FromIoDesc, IoDesc, IoReader, IoWriter, NonBlock, PipeReader};
@@ -33,8 +34,20 @@ impl Hamelin {
         let client_str = format!("{} ({:?})", self.process, self.args);
         let mut cmd = Command::new(&self.process);
         cmd.env_set_all(&[("H-VERSION", "hamelin.rs"),
-                          ("H-TYPE", "HAMELIN.RS-NET-0.1"),
+                          ("H-TYPE", "HAMELIN.RS-GENERIC-0.1"),
                           ("H-CLIENT", &client_str)]);
+        if let Some(ref args) = self.args {
+            cmd.args(args);
+        }
+        Ok(HamelinGuard::new(try!(cmd.spawn())))
+    }
+
+    /// Spawns a Hamelin server from the daemon using the specified environment variables.
+    pub fn spawn_with_env<T, U>(&self, env: &[(T, U)]) -> IoResult<HamelinGuard>
+        where T: BytesContainer, U: BytesContainer {
+        let mut cmd = Command::new(&self.process);
+        cmd.env_set_all(env);
+        cmd.env("H-VERSION", "hamelin.rs");
         if let Some(ref args) = self.args {
             cmd.args(args);
         }
