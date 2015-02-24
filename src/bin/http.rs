@@ -19,7 +19,6 @@ struct HamelinHandler(Hamelin);
 #[cfg(feature = "hyper")]
 impl Handler for HamelinHandler {
     fn handle(&self, mut req: Request, mut res: Response) {
-        let &HamelinHandler(ref hamelin) = self;
         let path = match req.uri {
             AbsolutePath(ref path) => match &req.method {
                 &Post => path.to_owned(),
@@ -35,9 +34,9 @@ impl Handler for HamelinHandler {
                 return;
             }
         };
-        let mut guard = hamelin.spawn_with_env(&[("H-TYPE", "HAMELIN.RS-HTTP-POST-0.1"),
-                                                 ("H-CLIENT", &path),
-                                                 ("H-URI", &path)]).unwrap();
+        let mut guard = self.0.spawn_with_env(&[("H-TYPE", "HAMELIN.RS-HTTP-POST-0.1"),
+                                                ("H-CLIENT", &path),
+                                                ("H-URI", &path)]).unwrap();
         guard.write_line(&req.read_to_string().unwrap()).unwrap();
         guard.eof().unwrap();
         sleep(Duration::milliseconds(100));
