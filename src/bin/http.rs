@@ -1,4 +1,4 @@
-//! An HTTP POST-based implementation of Hamelin.
+//! An HTTP implementation of Hamelin supporting GET and POST.
 #![cfg_attr(feature = "hyper", feature(env, old_io, std_misc))]
 #[cfg(feature = "hyper")] extern crate hamelin;
 #[cfg(feature = "hyper")] extern crate hyper;
@@ -8,7 +8,7 @@
 #[cfg(feature = "hyper")] use std::old_io::timer::sleep;
 #[cfg(feature = "hyper")] use std::time::duration::Duration;
 #[cfg(feature = "hyper")] use hamelin::Hamelin;
-#[cfg(feature = "hyper")] use hyper::Post;
+#[cfg(feature = "hyper")] use hyper::{Get, Post};
 #[cfg(feature = "hyper")] use hyper::server::{Handler, Request, Response, Server};
 #[cfg(feature = "hyper")] use hyper::uri::RequestUri::AbsolutePath;
 
@@ -23,6 +23,7 @@ impl Handler for HamelinHandler {
         let path = match req.uri {
             AbsolutePath(ref path) => match &req.method {
                 &Post => path.to_owned(),
+                &Get => path.to_owned(),
                 _ => {
                     *res.status_mut() = hyper::NotFound;
                     res.start().and_then(|res| res.end()).unwrap();
