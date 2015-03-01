@@ -1,5 +1,5 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(env, old_io)]
+#![feature(env, net, old_io)]
 extern crate hamelin;
 extern crate mio;
 
@@ -7,19 +7,18 @@ use std::collections::HashMap;
 use std::env::args;
 use std::old_io::IoErrorKind::TimedOut;
 use hamelin::{BufferedAsyncStream, Hamelin, HamelinGuard};
-use mio::{EventLoop, Handler, Interest, IoAcceptor, NonBlock, PollOpt, ReadHint, Token};
-use mio::net::SockAddr;
-use mio::net::tcp::{TcpSocket, TcpAcceptor};
+use mio::{EventLoop, Handler, Interest, PollOpt, ReadHint, Token};
+use mio::net::tcp::{TcpSocket, TcpStream, TcpListener};
 
 const SERVER: Token = Token(0);
 
 struct Client {
-    stream: BufferedAsyncStream<TcpSocket>,
+    stream: BufferedAsyncStream<TcpStream>,
     guard: HamelinGuard,
 }
 
 impl Client {
-    fn new(sock: TcpSocket, guard: HamelinGuard) -> Client {
+    fn new(sock: TcpStream, guard: HamelinGuard) -> Client {
         Client {
             stream: BufferedAsyncStream::new(sock),
             guard: guard
@@ -58,14 +57,14 @@ impl Client {
 }
 
 struct HamelinHandler {
-    server: TcpAcceptor,
+    server: TcpListener,
     hamelin: Hamelin,
     token_index: usize,
     clients: HashMap<usize, Client>,
 }
 
 impl HamelinHandler {
-    fn new(server: TcpAcceptor, hamelin: Hamelin) -> HamelinHandler {
+    fn new(server: TcpListener, hamelin: Hamelin) -> HamelinHandler {
         HamelinHandler {
             server: server,
             hamelin: hamelin,
@@ -75,7 +74,7 @@ impl HamelinHandler {
     }
 
     fn accept(&mut self, eloop: &mut EventLoop<(), ()>) {
-        if let NonBlock::Ready(client) = self.server.accept().unwrap() {
+        if let Ok((client, _)) = self.server.accept() {
             let token = mio::Token(self.token_index);
             self.token_index += 1;
             eloop.register_opt(&client, token, Interest::all(), PollOpt::level())
@@ -138,11 +137,11 @@ fn main() {
     } else { 
         None 
     });
-    let addr = SockAddr::parse(&format!("{}:{}", if args[0] == "localhost" { "127.0.0.1" } else 
-                                        { &*args[0] }, args[1])).unwrap();
-    let server = TcpSocket::v4().unwrap()
-                    .bind(&addr).unwrap()
-                    .listen(256).unwrap();
+    let addr = format!("{}:{}", if args[0] == "localhost" { "127.0.0.1" } else { &*args[0] }, 
+                       args[1]).parse().unwrap();
+    let socket = TcpSocket::v4().unwrap();
+    socket.bind(&addr).unwrap();
+    let server = socket.listen(256).unwrap();
     println!("Server bound on {:?}.", addr);
     let mut eloop = EventLoop::<(), ()>::new().unwrap();
     eloop.register(&server, SERVER).unwrap();

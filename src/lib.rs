@@ -10,7 +10,7 @@ use std::old_io::process::{Command, Process};
 use std::old_path::BytesContainer;
 use std::os::unix::AsRawFd;
 use std::str::from_utf8;
-use mio::{FromIoDesc, IoDesc, IoReader, IoWriter, NonBlock, PipeReader};
+use mio::{FromFd, TryRead, TryWrite, NonBlock, PipeReader};
 use nix::fcntl::{O_NONBLOCK, O_CLOEXEC, fcntl};
 use nix::fcntl::FcntlArg::F_SETFL;
 use nix::unistd::close;
@@ -70,7 +70,7 @@ impl HamelinGuard {
         fcntl(fd, F_SETFL(O_NONBLOCK | O_CLOEXEC)).unwrap();
         HamelinGuard {
             process: process,
-            alr: AsyncLineReader::new(FromIoDesc::from_desc(IoDesc { fd: fd })),
+            alr: AsyncLineReader::new(FromFd::from_fd(fd)),
         }
     }
 
@@ -162,12 +162,12 @@ impl AsyncLineReader {
     }
 }
 
-pub struct BufferedAsyncStream<T: IoReader + IoWriter> {
+pub struct BufferedAsyncStream<T: TryRead + TryWrite> {
     pub stream: T,
     read_buf: Vec<u8>
 }
 
-impl<T: IoReader + IoWriter> BufferedAsyncStream<T> {
+impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
     pub fn new(stream: T) -> BufferedAsyncStream<T> {
         BufferedAsyncStream { stream: stream, read_buf: Vec::new() }
     }
