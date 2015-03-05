@@ -2,8 +2,8 @@ language: rust
 script:
   - cargo build --verbose
   - cargo test --verbose
-  - cargo build --features "openssl irc hyper"
-  - cargo test --features "openssl irc hyper"
+  - cargo build --features all
+  - cargo test --features all
 notifications:
   irc:
     channels:
