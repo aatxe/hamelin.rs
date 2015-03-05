@@ -21,7 +21,3 @@ optional = true
 [dependencies.irc]
 irc = "*"
 optional = true
-
-[dependencies.openssl]
-openssl = "*"
-optional = true
