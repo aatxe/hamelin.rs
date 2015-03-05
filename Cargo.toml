@@ -8,6 +8,9 @@ license = "CC0-1.0"
 repository = "https://github.com/aatxe/hamelin.rs"
 readme = "README.md"
 
+[features]
+all = ["irc", "hyper"]
+
 [dependencies.mio]
 git = "https://github.com/carllerche/mio"
 
