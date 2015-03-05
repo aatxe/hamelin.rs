@@ -1,11 +1,11 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(net, old_io)]
+#![feature(io, net)]
 extern crate hamelin;
 extern crate mio;
 
 use std::collections::HashMap;
 use std::env::args;
-use std::old_io::IoErrorKind::TimedOut;
+use std::io::ErrorKind::TimedOut;
 use hamelin::{BufferedAsyncStream, Hamelin, HamelinGuard};
 use mio::{EventLoop, Handler, Interest, PollOpt, ReadHint, Token};
 use mio::net::tcp::{TcpSocket, TcpStream, TcpListener};
@@ -33,10 +33,10 @@ impl Client {
         match self.stream.read_line() {
             Ok(line) => match self.guard.write_line(&line) {
                 Ok(_) => Ok(()),
-                Err(ref e) if e.kind == TimedOut => Ok(()),
+                Err(ref e) if e.kind() == TimedOut => Ok(()),
                 Err(_) => Err(()),
             },
-            Err(ref e) if e.kind == TimedOut => Ok(()),
+            Err(ref e) if e.kind() == TimedOut => Ok(()),
             Err(_) => Err(()),
         }    
     }
@@ -47,10 +47,10 @@ impl Client {
                 Ok(_) => {
                     Ok(())
                 },
-                Err(ref e) if e.kind == TimedOut => Ok(()),
+                Err(ref e) if e.kind() == TimedOut => Ok(()),
                 Err(_) => Err(()),
             },
-            Err(ref e) if e.kind == TimedOut => Ok(()),
+            Err(ref e) if e.kind() == TimedOut => Ok(()),
             Err(_) => Err(()),
         }
     }

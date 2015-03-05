@@ -5,7 +5,9 @@ extern crate mio;
 extern crate nix;
 
 use std::borrow::ToOwned;
-use std::old_io::{IoError, IoErrorKind, IoResult};
+use std::io::{Error, ErrorKind, Result};
+use std::io::ErrorKind::{Other, TimedOut};
+use std::old_io::{IoError, IoErrorKind};
 use std::old_io::process::{Command, Process};
 use std::old_path::BytesContainer;
 use std::os::unix::AsRawFd;
@@ -31,7 +33,7 @@ impl Hamelin {
     }
 
     /// Spawns a Hamelin server from the daemon.
-    pub fn spawn(&self) -> IoResult<HamelinGuard> {
+    pub fn spawn(&self) -> Result<HamelinGuard> {
         let client_str = format!("{} ({:?})", self.process, self.args);
         let mut cmd = Command::new(&self.process);
         cmd.env_set_all(&[("H-VERSION", "hamelin.rs"),
@@ -40,11 +42,11 @@ impl Hamelin {
         if let Some(ref args) = self.args {
             cmd.args(args);
         }
-        Ok(HamelinGuard::new(try!(cmd.spawn())))
+        Ok(HamelinGuard::new(try!(cmd.spawn().map_err(convert_io_error))))
     }
 
     /// Spawns a Hamelin server from the daemon using the specified environment variables.
-    pub fn spawn_with_env<T, U>(&self, env: &[(T, U)]) -> IoResult<HamelinGuard>
+    pub fn spawn_with_env<T, U>(&self, env: &[(T, U)]) -> Result<HamelinGuard>
         where T: BytesContainer, U: BytesContainer {
         let mut cmd = Command::new(&self.process);
         cmd.env_set_all(env);
@@ -52,7 +54,7 @@ impl Hamelin {
         if let Some(ref args) = self.args {
             cmd.args(args);
         }
-        Ok(HamelinGuard::new(try!(cmd.spawn())))
+        Ok(HamelinGuard::new(try!(cmd.spawn().map_err(convert_io_error))))
     }
 }
 
@@ -75,38 +77,36 @@ impl HamelinGuard {
     }
 
     /// Writes a line to the server's stdin.
-    pub fn write_line(&mut self, line: &str) -> IoResult<()> { 
+    pub fn write_line(&mut self, line: &str) -> Result<()> { 
         self.process.stdin.as_mut().map(|mut s| s.write_line(line)).unwrap()
+            .map_err(convert_io_error)
     }
 
     /// Reads a line asynchronously from the server's stdout.
-    pub fn read_line(&mut self) -> IoResult<String> {
+    pub fn read_line(&mut self) -> Result<String> {
         self.alr.read_line()
     }
 
     /// Closes the server's stdin.
-    pub fn eof(&mut self) -> IoResult<()> {
+    pub fn eof(&mut self) -> Result<()> {
         self.process.stdin.as_ref().map(|s| close(s.as_raw_fd())).unwrap().map_err(|e| 
-        IoError {
-            kind: IoErrorKind::IoUnavailable,
-            desc: "Failed to close stdin.",
-            detail: Some(format!("{:?}", e)),
-        })
+            Error::new(Other, "Failed to close stdin.", Some(format!("{:?}", e)))
+        )
     }
 
     /// Awaits the completion of the server.
-    pub fn wait(&mut self) -> IoResult<()> {
-        self.process.wait().map(|_| ())
+    pub fn wait(&mut self) -> Result<()> {
+        self.process.wait().map(|_| ()).map_err(convert_io_error)
     }
 
     /// Sends a kill signal to the server.
-    pub fn kill(&mut self) -> IoResult<()> {
-        try!(self.process.signal_exit());
+    pub fn kill(&mut self) -> Result<()> {
+        try!(self.process.signal_exit().map_err(convert_io_error));
         self.process.set_timeout(Some(1000));
         if let Ok(_) = self.process.wait() {
             return Ok(())
         }
-        self.process.signal_kill()
+        self.process.signal_kill().map_err(convert_io_error)
     }
 }
 
@@ -117,7 +117,7 @@ impl AsyncLineReader {
         AsyncLineReader { read: pr, buf: Vec::new() }
     }
 
-    pub fn read_line(&mut self) -> IoResult<String> {
+    pub fn read_line(&mut self) -> Result<String> {
         if let Some(pos) = self.buf.position_elem(&b'\n') {
             let mut rest = self.buf.split_off(pos);
             rest.remove(0);
@@ -128,11 +128,7 @@ impl AsyncLineReader {
         let mut buf = [0; 100];
         match self.read.read_slice(&mut buf) {
             Ok(None) => {
-                return Err(IoError {
-                    kind: IoErrorKind::TimedOut,
-                    desc: "Reading would've blocked.",
-                    detail: None,
-                })
+                return Err(Error::new(TimedOut, "Reading would've blocked.", None))
             },
             Ok(Some(size)) => {  
                 self.buf.push_all(&buf[..size]);
@@ -145,19 +141,11 @@ impl AsyncLineReader {
                         return Ok(result);
                     }
                     None => { 
-                        return Err(IoError {
-                            kind: IoErrorKind::TimedOut,
-                            desc: "Reading would've blocked.",
-                            detail: None,
-                        })
+                        return Err(Error::new(TimedOut, "Reading would've blocked.", None))
                     }
                 }
             }
-            Err(e) => Err(IoError {
-                kind: IoErrorKind::TimedOut,
-                desc: "Reading would've blocked.",
-                detail: Some(format!("{:?}", e)),
-            })
+            Err(_) => Err(Error::new(TimedOut, "Reading would've blocked.", None))
         }
     }
 }
@@ -172,7 +160,7 @@ impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
         BufferedAsyncStream { stream: stream, read_buf: Vec::new() }
     }
 
-    pub fn read_line(&mut self) -> IoResult<String> {
+    pub fn read_line(&mut self) -> Result<String> {
         if let Some(pos) = self.read_buf.position_elem(&b'\n') {
             let mut rest = self.read_buf.split_off(pos);
             rest.remove(0);
@@ -180,24 +168,12 @@ impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
             self.read_buf = rest;
             return Ok(result);
         } else if let Some(_) = self.read_buf.position_elem(&4) {
-            return Err(IoError {
-                kind: IoErrorKind::EndOfFile,
-                desc: "End of File reached.",
-                detail: None,
-            });
+            return Err(Error::new(Other, "End of File reached.", None));
         }
         let mut buf = [0; 100];
         match self.stream.read_slice(&mut buf) {
-            Ok(None) => Err(IoError {
-                kind: IoErrorKind::TimedOut,
-                desc: "Reading would've blocked.",
-                detail: None,
-            }),
-            Ok(Some(0)) => Err(IoError {
-                kind: IoErrorKind::EndOfFile,
-                desc: "End of File reached.",
-                detail: None,
-            }),
+            Ok(None) => Err(Error::new(TimedOut, "Reading would've blocked.", None)),
+            Ok(Some(0)) => Err(Error::new(TimedOut, "Reading would've blocked.", None)),
             Ok(Some(size)) => {  
                 self.read_buf.push_all(&buf[..size]);
                 match self.read_buf.position_elem(&b'\n') {
@@ -209,54 +185,46 @@ impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
                         return Ok(result);
                     }
                     None => { 
-                        return Err(IoError {
-                            kind: IoErrorKind::TimedOut,
-                            desc: "Reading would've blocked.",
-                            detail: None,
-                        })
+                        return Err(Error::new(TimedOut, "Reading would've blocked.", None))
                     }
                 }
             }
-            Err(e) => Err(IoError {
-                kind: IoErrorKind::TimedOut,
-                desc: "Reading would've blocked.",
-                detail: Some(format!("{:?}", e)),
-            })
+            Err(_) => Err(Error::new(TimedOut, "Reading would've blocked.", None))
         }
     }
 
-    pub fn write_line(&mut self, s: &str) -> IoResult<()> {
+    pub fn write_line(&mut self, s: &str) -> Result<()> {
         match self.stream.write_slice(&s.as_bytes()) {
-            Ok(None) => Err(IoError {
-                kind: IoErrorKind::TimedOut,
-                desc: "Writing would've blocked.",
-                detail: None,
-            }),
-            Ok(Some(0)) => Err(IoError {
-                kind: IoErrorKind::EndOfFile,
-                desc: "End of File reached.",
-                detail: None,
-            }),
+            Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.", None)),
+            Ok(Some(0)) => Err(Error::new(Other, "End of File reached.", None)),
             Ok(Some(_)) => {  
                 match self.stream.write_slice(&b"\n") {
-                    Ok(None) => Err(IoError {
-                        kind: IoErrorKind::TimedOut,
-                        desc: "Writing would've blocked.",
-                        detail: None,
-                    }),
+                    Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.", None)),
                     Ok(_) => Ok(()),
-                    Err(e) => Err(IoError {
-                        kind: IoErrorKind::TimedOut,
-                        desc: "Writing would've blocked.",
-                        detail: Some(format!("{:?}", e)),
-                    })
+                    Err(_) => Err(Error::new(TimedOut, "Writing would've blocked.", None))
                 }
             }
-            Err(e) => Err(IoError {
-                kind: IoErrorKind::TimedOut,
-                desc: "Writing would've blocked.",
-                detail: Some(format!("{:?}", e)),
-            })   
+            Err(_) => Err(Error::new(TimedOut, "Writing would've blocked.", None))   
         }
     }
+}
+
+fn convert_io_error(e: IoError) -> Error {
+    Error::new(match e.kind {
+        IoErrorKind::FileNotFound => ErrorKind::FileNotFound,
+        IoErrorKind::PermissionDenied => ErrorKind::PermissionDenied,
+        IoErrorKind::ConnectionRefused => ErrorKind::ConnectionRefused,
+        IoErrorKind::ConnectionReset => ErrorKind::ConnectionReset,
+        IoErrorKind::ConnectionAborted => ErrorKind::ConnectionAborted,
+        IoErrorKind::NotConnected => ErrorKind::NotConnected,
+        IoErrorKind::BrokenPipe => ErrorKind::BrokenPipe,
+        IoErrorKind::PathAlreadyExists => ErrorKind::PathAlreadyExists,
+        IoErrorKind::PathDoesntExist => ErrorKind::PathDoesntExist,
+        IoErrorKind::MismatchedFileTypeForOperation => ErrorKind::MismatchedFileTypeForOperation,
+        IoErrorKind::ResourceUnavailable => ErrorKind::ResourceUnavailable,
+        IoErrorKind::InvalidInput => ErrorKind::InvalidInput,
+        IoErrorKind::TimedOut => ErrorKind::TimedOut,
+        IoErrorKind::ShortWrite(0) => ErrorKind::WriteZero,
+        _ => ErrorKind::Other
+    }, e.desc, e.detail)
 }
