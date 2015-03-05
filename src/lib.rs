@@ -10,7 +10,7 @@ use std::old_io::process::{Command, Process};
 use std::old_path::BytesContainer;
 use std::os::unix::AsRawFd;
 use std::str::from_utf8;
-use mio::{FromFd, TryRead, TryWrite, NonBlock, PipeReader};
+use mio::{FromFd, TryRead, TryWrite, PipeReader};
 use nix::fcntl::{O_NONBLOCK, O_CLOEXEC, fcntl};
 use nix::fcntl::FcntlArg::F_SETFL;
 use nix::unistd::close;
@@ -127,14 +127,14 @@ impl AsyncLineReader {
         }
         let mut buf = [0; 100];
         match self.read.read_slice(&mut buf) {
-            Ok(NonBlock::WouldBlock) => {
+            Ok(None) => {
                 return Err(IoError {
                     kind: IoErrorKind::TimedOut,
                     desc: "Reading would've blocked.",
                     detail: None,
                 })
             },
-            Ok(NonBlock::Ready(size)) => {  
+            Ok(Some(size)) => {  
                 self.buf.push_all(&buf[..size]);
                 match self.buf.position_elem(&b'\n') {
                     Some(pos) => {
@@ -188,12 +188,17 @@ impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
         }
         let mut buf = [0; 100];
         match self.stream.read_slice(&mut buf) {
-            Ok(NonBlock::WouldBlock) => Err(IoError {
+            Ok(None) => Err(IoError {
                 kind: IoErrorKind::TimedOut,
                 desc: "Reading would've blocked.",
                 detail: None,
             }),
-            Ok(NonBlock::Ready(size)) => {  
+            Ok(Some(0)) => Err(IoError {
+                kind: IoErrorKind::EndOfFile,
+                desc: "End of File reached.",
+                detail: None,
+            }),
+            Ok(Some(size)) => {  
                 self.read_buf.push_all(&buf[..size]);
                 match self.read_buf.position_elem(&b'\n') {
                     Some(pos) => {
@@ -212,11 +217,6 @@ impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
                     }
                 }
             }
-            Err(e) if e.is_eof() => Err(IoError {
-                kind: IoErrorKind::EndOfFile,
-                desc: "End of File reached.",
-                detail: Some(format!("{:?}", e)),
-            }),
             Err(e) => Err(IoError {
                 kind: IoErrorKind::TimedOut,
                 desc: "Reading would've blocked.",
@@ -227,14 +227,19 @@ impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
 
     pub fn write_line(&mut self, s: &str) -> IoResult<()> {
         match self.stream.write_slice(&s.as_bytes()) {
-            Ok(NonBlock::WouldBlock) => Err(IoError {
+            Ok(None) => Err(IoError {
                 kind: IoErrorKind::TimedOut,
                 desc: "Writing would've blocked.",
                 detail: None,
             }),
-            Ok(NonBlock::Ready(_)) => {  
+            Ok(Some(0)) => Err(IoError {
+                kind: IoErrorKind::EndOfFile,
+                desc: "End of File reached.",
+                detail: None,
+            }),
+            Ok(Some(_)) => {  
                 match self.stream.write_slice(&b"\n") {
-                    Ok(NonBlock::WouldBlock) => Err(IoError {
+                    Ok(None) => Err(IoError {
                         kind: IoErrorKind::TimedOut,
                         desc: "Writing would've blocked.",
                         detail: None,
@@ -247,11 +252,6 @@ impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
                     })
                 }
             }
-            Err(e) if e.is_eof() => Err(IoError {
-                kind: IoErrorKind::EndOfFile,
-                desc: "End of File reached.",
-                detail: Some(format!("{:?}", e)),
-            }),
             Err(e) => Err(IoError {
                 kind: IoErrorKind::TimedOut,
                 desc: "Writing would've blocked.",

@@ -1,5 +1,5 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(env, net, old_io)]
+#![feature(net, old_io)]
 extern crate hamelin;
 extern crate mio;
 
