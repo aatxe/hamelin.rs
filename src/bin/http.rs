@@ -1,10 +1,11 @@
 //! An HTTP implementation of Hamelin supporting GET and POST.
-#![cfg_attr(feature = "hyper", feature(env, old_io, std_misc))]
+#![cfg_attr(feature = "hyper", feature(io, old_io, std_misc))]
 #[cfg(feature = "hyper")] extern crate hamelin;
 #[cfg(feature = "hyper")] extern crate hyper;
 
 #[cfg(feature = "hyper")] use std::borrow::ToOwned;
 #[cfg(feature = "hyper")] use std::env::args;
+#[cfg(feature = "hyper")] use std::io::prelude::*;
 #[cfg(feature = "hyper")] use std::old_io::timer::sleep;
 #[cfg(feature = "hyper")] use std::time::duration::Duration;
 #[cfg(feature = "hyper")] use hamelin::Hamelin;
@@ -37,12 +38,15 @@ impl Handler for HamelinHandler {
         let mut guard = self.0.spawn_with_env(&[("H-TYPE", "HAMELIN.RS-HTTP-POST-0.1"),
                                                 ("H-CLIENT", &path),
                                                 ("H-URI", &path)]).unwrap();
-        guard.write_line(&req.read_to_string().unwrap()).unwrap();
+        let mut data = String::new();
+        req.read_to_string(&mut data).unwrap();
+        guard.write_line(&data).unwrap();
         guard.eof().unwrap();
         sleep(Duration::milliseconds(100));
         let mut res = res.start().unwrap();
         while let Ok(line) = guard.read_line() {
-            res.write_line(&line).unwrap();
+            res.write_all(&line.as_bytes()).unwrap();
+            res.flush().unwrap();
         }
         res.end().unwrap();
     }
@@ -60,9 +64,9 @@ fn main() {
     } else { 
         None
     });
-    let server = Server::http(args[0].parse().ok().expect("Invalid IP address."), 
-                              args[1].parse().ok().expect("Invalid port number."));
-    let _guard = server.listen(HamelinHandler(hamelin)).unwrap();
+    let server = Server::http(HamelinHandler(hamelin));
+    let _guard = server.listen(args[0].parse().ok().expect("Invalid IP address."), 
+                              args[1].parse().ok().expect("Invalid port number.")).unwrap();
     println!("Listening on http://{}:{}/", args[0], args[1]);
 }
 
