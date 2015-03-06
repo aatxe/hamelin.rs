@@ -7,18 +7,18 @@ use std::collections::HashMap;
 use std::env::args;
 use std::io::ErrorKind::TimedOut;
 use hamelin::{BufferedAsyncStream, Hamelin, HamelinGuard};
-use mio::{EventLoop, Handler, Interest, PollOpt, ReadHint, Token};
-use mio::net::tcp::{TcpSocket, TcpStream, TcpListener};
+use mio::*;
+use mio::net::tcp::{v4, TcpStream, TcpListener};
 
 const SERVER: Token = Token(0);
 
 struct Client {
-    stream: BufferedAsyncStream<TcpStream>,
+    stream: BufferedAsyncStream<NonBlock<TcpStream>>,
     guard: HamelinGuard,
 }
 
 impl Client {
-    fn new(sock: TcpStream, guard: HamelinGuard) -> Client {
+    fn new(sock: NonBlock<TcpStream>, guard: HamelinGuard) -> Client {
         Client {
             stream: BufferedAsyncStream::new(sock),
             guard: guard
@@ -57,14 +57,14 @@ impl Client {
 }
 
 struct HamelinHandler {
-    server: TcpListener,
+    server: NonBlock<TcpListener>,
     hamelin: Hamelin,
     token_index: usize,
     clients: HashMap<usize, Client>,
 }
 
 impl HamelinHandler {
-    fn new(server: TcpListener, hamelin: Hamelin) -> HamelinHandler {
+    fn new(server: NonBlock<TcpListener>, hamelin: Hamelin) -> HamelinHandler {
         HamelinHandler {
             server: server,
             hamelin: hamelin,
@@ -73,8 +73,8 @@ impl HamelinHandler {
         }
     }
 
-    fn accept(&mut self, eloop: &mut EventLoop<(), ()>) {
-        if let Ok((client, _)) = self.server.accept() {
+    fn accept(&mut self, eloop: &mut EventLoop<HamelinHandler>) {
+        if let Ok(Some(client)) = self.server.accept() {
             let token = mio::Token(self.token_index);
             self.token_index += 1;
             eloop.register_opt(&client, token, Interest::all(), PollOpt::level())
@@ -102,8 +102,11 @@ impl HamelinHandler {
     }
 }
 
-impl Handler<(), ()> for HamelinHandler {
-    fn readable(&mut self, eloop: &mut EventLoop<(), ()>, token: Token, _: ReadHint) {
+impl Handler for HamelinHandler {
+    type Timeout = ();
+    type Message = ();
+
+    fn readable(&mut self, eloop: &mut EventLoop<HamelinHandler>, token: Token, _: ReadHint) {
         match token {
             SERVER => self.accept(eloop),
             Token(x) => {
@@ -116,7 +119,7 @@ impl Handler<(), ()> for HamelinHandler {
         }
     }
 
-    fn writable(&mut self, _: &mut EventLoop<(), ()>, token: Token) {
+    fn writable(&mut self, _: &mut EventLoop<HamelinHandler>, token: Token) {
         match token {
             SERVER => (),
             Token(x) => {
@@ -139,11 +142,11 @@ fn main() {
     });
     let addr = format!("{}:{}", if args[0] == "localhost" { "127.0.0.1" } else { &*args[0] }, 
                        args[1]).parse().unwrap();
-    let socket = TcpSocket::v4().unwrap();
+    let socket = v4().unwrap();
     socket.bind(&addr).unwrap();
     let server = socket.listen(256).unwrap();
     println!("Server bound on {:?}.", addr);
-    let mut eloop = EventLoop::<(), ()>::new().unwrap();
+    let mut eloop = EventLoop::<HamelinHandler>::new().unwrap();
     eloop.register(&server, SERVER).unwrap();
     let mut handler = HamelinHandler::new(server, hamelin);
     eloop.run(&mut handler).ok().expect("Failed to execute event loop.");
