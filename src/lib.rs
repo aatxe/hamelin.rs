@@ -150,14 +150,14 @@ impl AsyncLineReader {
     }
 }
 
-pub struct BufferedAsyncStream<T: TryRead + TryWrite> {
+pub struct AsyncBufStream<T: TryRead + TryWrite> {
     pub stream: T,
     read_buf: Vec<u8>
 }
 
-impl<T: TryRead + TryWrite> BufferedAsyncStream<T> {
-    pub fn new(stream: T) -> BufferedAsyncStream<T> {
-        BufferedAsyncStream { stream: stream, read_buf: Vec::new() }
+impl<T: TryRead + TryWrite> AsyncBufStream<T> {
+    pub fn new(stream: T) -> AsyncBufStream<T> {
+        AsyncBufStream { stream: stream, read_buf: Vec::new() }
     }
 
     pub fn read_line(&mut self) -> Result<String> {

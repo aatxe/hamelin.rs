@@ -6,21 +6,21 @@ extern crate mio;
 use std::collections::HashMap;
 use std::env::args;
 use std::io::ErrorKind::TimedOut;
-use hamelin::{BufferedAsyncStream, Hamelin, HamelinGuard};
+use hamelin::{AsyncBufStream, Hamelin, HamelinGuard};
 use mio::*;
 use mio::net::tcp::{v4, TcpStream, TcpListener};
 
 const SERVER: Token = Token(0);
 
 struct Client {
-    stream: BufferedAsyncStream<NonBlock<TcpStream>>,
+    stream: AsyncBufStream<NonBlock<TcpStream>>,
     guard: HamelinGuard,
 }
 
 impl Client {
     fn new(sock: NonBlock<TcpStream>, guard: HamelinGuard) -> Client {
         Client {
-            stream: BufferedAsyncStream::new(sock),
+            stream: AsyncBufStream::new(sock),
             guard: guard
         }
     }
