@@ -1,5 +1,4 @@
 //! An IRC implementation of Hamelin.
-#![cfg_attr(feature = "irc", feature(env))]
 #[cfg(feature = "irc")] extern crate hamelin;
 #[cfg(feature = "irc")] extern crate irc;
 
@@ -9,10 +8,8 @@
 #[cfg(feature = "irc")] use std::sync::{Arc, Mutex};
 #[cfg(feature = "irc")] use std::thread::spawn;
 #[cfg(feature = "irc")] use hamelin::{Hamelin, HamelinGuard};
-#[cfg(feature = "irc")] use irc::client::data::Command;
 #[cfg(feature = "irc")] use irc::client::data::Command::PRIVMSG;
-#[cfg(feature = "irc")] use irc::client::server::{IrcServer, Server};
-#[cfg(feature = "irc")] use irc::client::server::utils::Wrapper;
+#[cfg(feature = "irc")] use irc::client::prelude::*;
 
 #[cfg(feature = "irc")]
 fn main() {
@@ -28,21 +25,19 @@ fn main() {
     }));   
     let cache: Arc<Mutex<HashMap<String, HamelinGuard>>> = Arc::new(Mutex::new(HashMap::new()));
     loop {
-        let irc_server = Arc::new(IrcServer::new(&args[0])
+        let server = Arc::new(IrcServer::new(&args[0])
                                   .ok().expect("Failed to connect to IRC server."));
-        let server_ref = irc_server.clone();
-        let cache_ref = cache.clone();
+        let tserver = server.clone();
+        let tcache = cache.clone();
         spawn(move || { 
-            let server = Wrapper::new(&*server_ref);
             loop {
-                for (resp, guard) in cache_ref.lock().unwrap().iter_mut() {
+                for (resp, guard) in tcache.lock().unwrap().iter_mut() {
                     if let Ok(line) = guard.read_line() {
-                        server.send_privmsg(&resp, &line).unwrap();
+                        tserver.send_privmsg(&resp, &line).unwrap();
                     }
                 }
             }
         });
-        let server = Wrapper::new(&*irc_server);
         server.identify().unwrap();
         for message in server.iter() {
             match message {
@@ -51,9 +46,9 @@ fn main() {
                     if let Ok(PRIVMSG(chan, msg)) = Command::from_message(&message) {
                         let mut cache = cache.lock().unwrap();
                         let resp = if chan.starts_with("#") { 
-                            chan 
+                            &chan[..]
                         } else { 
-                            message.get_source_nickname().unwrap_or(chan)
+                            message.get_source_nickname().unwrap_or(&chan)
                         }.to_owned();
                         if !cache.contains_key(&resp) {
                             let client_str = format!("{}://{}:{}/{}", if server.config().use_ssl() {
@@ -65,7 +60,7 @@ fn main() {
                             ];
                             cache.insert(resp.clone(), hamelin.spawn_with_env(&env).unwrap());
                         }
-                        let _ = cache[resp].write_line(msg);
+                        let _ = cache[resp].write_line(&msg);
                     }
                 },
                 Err(e) => {
