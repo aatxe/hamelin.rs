@@ -6,9 +6,10 @@ extern crate mio;
 use std::collections::HashMap;
 use std::env::args;
 use std::io::ErrorKind::TimedOut;
+use std::net::{TcpStream, TcpListener};
 use hamelin::{AsyncBufStream, Hamelin, HamelinGuard};
 use mio::*;
-use mio::net::tcp::{v4, TcpStream, TcpListener};
+use mio::tcp::v4;
 
 const SERVER: Token = Token(0);
 
