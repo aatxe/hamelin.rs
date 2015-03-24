@@ -15,7 +15,7 @@ all = ["irc", "hyper"]
 git = "https://github.com/carllerche/mio"
 
 [dependencies.nix]
-nix = "*"
+git = "https://github.com/carllerche/nix-rust"
 
 [dependencies.hyper]
 hyper = "*"
