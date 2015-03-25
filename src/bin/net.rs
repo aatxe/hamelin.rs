@@ -1,5 +1,4 @@
 //! A TCP socket implementation of Hamelin.
-#![feature(io, net)]
 extern crate hamelin;
 extern crate mio;
 
@@ -88,7 +87,7 @@ impl HamelinHandler {
     }
 
     fn read(&mut self, token: usize) -> Result<(), ()> {
-        let client = &mut self.clients[token];
+        let client = self.clients.get_mut(&token).unwrap();
         let res = client.read();
         res
     }
@@ -113,7 +112,7 @@ impl Handler for HamelinHandler {
             Token(x) => {
                 if let Err(_) = self.read(x) {
                     eloop.deregister(&self.clients[x].stream.stream).unwrap();
-                    let _ = self.clients[x].wait();
+                    let _ = self.clients.get_mut(&x).unwrap().wait();
                     self.clients.remove(&x);
                 }
             },

@@ -7,10 +7,10 @@ extern crate nix;
 use std::borrow::ToOwned;
 use std::io::{Error, ErrorKind, Result};
 use std::io::ErrorKind::{Other, TimedOut};
-use std::old_io::{IoError, IoErrorKind};
+use std::old_io::{IoError, IoErrorKind, Writer};
 use std::old_io::process::{Command, Process};
 use std::old_path::BytesContainer;
-use std::os::unix::AsRawFd;
+use std::os::unix::prelude::*;
 use std::str::from_utf8;
 use mio::{FromFd, TryRead, TryWrite, PipeReader};
 use nix::fcntl::{O_NONBLOCK, O_CLOEXEC, fcntl};
@@ -198,7 +198,7 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
             Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.", None)),
             Ok(Some(0)) => Err(Error::new(Other, "End of File reached.", None)),
             Ok(Some(_)) => {  
-                match self.stream.write_slice(&b"\n") {
+                match self.stream.write_slice(b"\n") {
                     Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.", None)),
                     Ok(_) => Ok(()),
                     Err(_) => Err(Error::new(TimedOut, "Writing would've blocked.", None))
@@ -211,17 +211,15 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
 
 fn convert_io_error(e: IoError) -> Error {
     Error::new(match e.kind {
-        IoErrorKind::FileNotFound => ErrorKind::FileNotFound,
+        IoErrorKind::FileNotFound => ErrorKind::NotFound,
         IoErrorKind::PermissionDenied => ErrorKind::PermissionDenied,
         IoErrorKind::ConnectionRefused => ErrorKind::ConnectionRefused,
         IoErrorKind::ConnectionReset => ErrorKind::ConnectionReset,
         IoErrorKind::ConnectionAborted => ErrorKind::ConnectionAborted,
         IoErrorKind::NotConnected => ErrorKind::NotConnected,
         IoErrorKind::BrokenPipe => ErrorKind::BrokenPipe,
-        IoErrorKind::PathAlreadyExists => ErrorKind::PathAlreadyExists,
-        IoErrorKind::PathDoesntExist => ErrorKind::PathDoesntExist,
-        IoErrorKind::MismatchedFileTypeForOperation => ErrorKind::MismatchedFileTypeForOperation,
-        IoErrorKind::ResourceUnavailable => ErrorKind::ResourceUnavailable,
+        IoErrorKind::PathAlreadyExists => ErrorKind::AlreadyExists,
+        IoErrorKind::PathDoesntExist => ErrorKind::NotFound,
         IoErrorKind::InvalidInput => ErrorKind::InvalidInput,
         IoErrorKind::TimedOut => ErrorKind::TimedOut,
         IoErrorKind::ShortWrite(0) => ErrorKind::WriteZero,
