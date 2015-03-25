@@ -1,12 +1,13 @@
 //! An HTTP implementation of Hamelin supporting GET and POST.
-#![cfg_attr(feature = "hyper", feature(io, old_io, std_misc))]
+#![cfg_attr(feature = "hyper", feature(std_misc, thread_sleep))]
 #[cfg(feature = "hyper")] extern crate hamelin;
 #[cfg(feature = "hyper")] extern crate hyper;
 
 #[cfg(feature = "hyper")] use std::borrow::ToOwned;
 #[cfg(feature = "hyper")] use std::env::args;
 #[cfg(feature = "hyper")] use std::io::prelude::*;
-#[cfg(feature = "hyper")] use std::old_io::timer::sleep;
+#[cfg(feature = "hyper")] use std::net::Ipv4Addr;
+#[cfg(feature = "hyper")] use std::thread::sleep;
 #[cfg(feature = "hyper")] use std::time::duration::Duration;
 #[cfg(feature = "hyper")] use hamelin::Hamelin;
 #[cfg(feature = "hyper")] use hyper::{Get, Post};
@@ -65,8 +66,10 @@ fn main() {
         None
     });
     let server = Server::http(HamelinHandler(hamelin));
-    let _guard = server.listen(args[0].parse().ok().expect("Invalid IP address."), 
-                              args[1].parse().ok().expect("Invalid port number.")).unwrap();
+    let _guard = server.listen(
+        (args[0].parse::<Ipv4Addr>().ok().expect("Invalid IP address."), 
+         args[1].parse::<u16>().ok().expect("Invalid port number."))
+    ).unwrap();
     println!("Listening on http://{}:{}/", args[0], args[1]);
 }
 

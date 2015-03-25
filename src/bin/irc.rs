@@ -60,7 +60,7 @@ fn main() {
                             ];
                             cache.insert(resp.clone(), hamelin.spawn_with_env(&env).unwrap());
                         }
-                        let _ = cache[resp].write_line(&msg);
+                        let _ = cache.get_mut(&resp).unwrap().write_line(&msg);
                     }
                 },
                 Err(e) => {
