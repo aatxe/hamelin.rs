@@ -111,7 +111,7 @@ impl Handler for HamelinHandler {
             SERVER => self.accept(eloop),
             Token(x) => {
                 if let Err(_) = self.read(x) {
-                    eloop.deregister(&self.clients[x].stream.stream).unwrap();
+                    eloop.deregister(&self.clients[&x].stream.stream).unwrap();
                     let _ = self.clients.get_mut(&x).unwrap().wait();
                     self.clients.remove(&x);
                 }
