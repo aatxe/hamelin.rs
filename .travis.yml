@@ -5,6 +5,7 @@ script:
   - cargo build --features all
   - cargo test --features all
 notifications:
+  email: false
   irc:
     channels:
       - "irc.fyrechat.net#vana-commits"
