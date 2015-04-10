@@ -1,5 +1,5 @@
 //! A Hamelin process-hosting backend.
-#![feature(collections, io, io_ext, old_io, old_path)]
+#![feature(collections, io, old_io, old_path)]
 
 extern crate mio;
 extern crate nix;
@@ -89,8 +89,8 @@ impl HamelinGuard {
 
     /// Closes the server's stdin.
     pub fn eof(&mut self) -> Result<()> {
-        self.process.stdin.as_ref().map(|s| close(s.as_raw_fd())).unwrap().map_err(|e| 
-            Error::new(Other, "Failed to close stdin.", Some(format!("{:?}", e)))
+        self.process.stdin.as_ref().map(|s| close(s.as_raw_fd())).unwrap().map_err(|_| 
+            Error::new(Other, "Failed to close stdin.")
         )
     }
 
@@ -128,7 +128,7 @@ impl AsyncLineReader {
         let mut buf = [0; 100];
         match self.read.read_slice(&mut buf) {
             Ok(None) => {
-                return Err(Error::new(TimedOut, "Reading would've blocked.", None))
+                return Err(Error::new(TimedOut, "Reading would've blocked."))
             },
             Ok(Some(size)) => {  
                 self.buf.push_all(&buf[..size]);
@@ -141,11 +141,11 @@ impl AsyncLineReader {
                         return Ok(result);
                     }
                     None => { 
-                        return Err(Error::new(TimedOut, "Reading would've blocked.", None))
+                        return Err(Error::new(TimedOut, "Reading would've blocked."))
                     }
                 }
             }
-            Err(_) => Err(Error::new(TimedOut, "Reading would've blocked.", None))
+            Err(_) => Err(Error::new(TimedOut, "Reading would've blocked."))
         }
     }
 }
@@ -168,12 +168,12 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
             self.read_buf = rest;
             return Ok(result);
         } else if let Some(_) = self.read_buf.position_elem(&4) {
-            return Err(Error::new(Other, "End of File reached.", None));
+            return Err(Error::new(Other, "End of File reached."));
         }
         let mut buf = [0; 100];
         match self.stream.read_slice(&mut buf) {
-            Ok(None) => Err(Error::new(TimedOut, "Reading would've blocked.", None)),
-            Ok(Some(0)) => Err(Error::new(TimedOut, "Reading would've blocked.", None)),
+            Ok(None) => Err(Error::new(TimedOut, "Reading would've blocked.")),
+            Ok(Some(0)) => Err(Error::new(TimedOut, "Reading would've blocked.")),
             Ok(Some(size)) => {  
                 self.read_buf.push_all(&buf[..size]);
                 match self.read_buf.position_elem(&b'\n') {
@@ -185,26 +185,26 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
                         return Ok(result);
                     }
                     None => { 
-                        return Err(Error::new(TimedOut, "Reading would've blocked.", None))
+                        return Err(Error::new(TimedOut, "Reading would've blocked."))
                     }
                 }
             }
-            Err(_) => Err(Error::new(TimedOut, "Reading would've blocked.", None))
+            Err(_) => Err(Error::new(TimedOut, "Reading would've blocked."))
         }
     }
 
     pub fn write_line(&mut self, s: &str) -> Result<()> {
         match self.stream.write_slice(&s.as_bytes()) {
-            Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.", None)),
-            Ok(Some(0)) => Err(Error::new(Other, "End of File reached.", None)),
+            Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.")),
+            Ok(Some(0)) => Err(Error::new(Other, "End of File reached.")),
             Ok(Some(_)) => {  
                 match self.stream.write_slice(b"\n") {
-                    Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.", None)),
+                    Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.")),
                     Ok(_) => Ok(()),
-                    Err(_) => Err(Error::new(TimedOut, "Writing would've blocked.", None))
+                    Err(_) => Err(Error::new(TimedOut, "Writing would've blocked."))
                 }
             }
-            Err(_) => Err(Error::new(TimedOut, "Writing would've blocked.", None))   
+            Err(_) => Err(Error::new(TimedOut, "Writing would've blocked."))   
         }
     }
 }
@@ -224,5 +224,5 @@ fn convert_io_error(e: IoError) -> Error {
         IoErrorKind::TimedOut => ErrorKind::TimedOut,
         IoErrorKind::ShortWrite(0) => ErrorKind::WriteZero,
         _ => ErrorKind::Other
-    }, e.desc, e.detail)
+    }, e.desc)
 }
