@@ -118,7 +118,7 @@ impl AsyncLineReader {
     }
 
     pub fn read_line(&mut self) -> Result<String> {
-        if let Some(pos) = self.buf.position_elem(&b'\n') {
+        if let Some(pos) = self.buf.iter().position(|x| x == &b'\n') {
             let mut rest = self.buf.split_off(pos);
             rest.remove(0);
             let result = from_utf8(&self.buf).unwrap().to_owned();
@@ -131,8 +131,8 @@ impl AsyncLineReader {
                 return Err(Error::new(TimedOut, "Reading would've blocked."))
             },
             Ok(Some(size)) => {  
-                self.buf.push_all(&buf[..size]);
-                match self.buf.position_elem(&b'\n') {
+                self.buf.extend(buf[..size].iter().map(|x| *x));
+                match self.buf.iter().position(|x| x == &b'\n') {
                     Some(pos) => {
                         let mut rest = self.buf.split_off(pos);
                         rest.remove(0);
@@ -161,13 +161,13 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
     }
 
     pub fn read_line(&mut self) -> Result<String> {
-        if let Some(pos) = self.read_buf.position_elem(&b'\n') {
+        if let Some(pos) = self.read_buf.iter().position(|x| x == &b'\n') {
             let mut rest = self.read_buf.split_off(pos);
             rest.remove(0);
             let result = from_utf8(&self.read_buf).unwrap().to_owned();
             self.read_buf = rest;
             return Ok(result);
-        } else if let Some(_) = self.read_buf.position_elem(&4) {
+        } else if let Some(_) = self.read_buf.iter().position(|x| x == &4) {
             return Err(Error::new(Other, "End of File reached."));
         }
         let mut buf = [0; 100];
@@ -175,8 +175,8 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
             Ok(None) => Err(Error::new(TimedOut, "Reading would've blocked.")),
             Ok(Some(0)) => Err(Error::new(TimedOut, "Reading would've blocked.")),
             Ok(Some(size)) => {  
-                self.read_buf.push_all(&buf[..size]);
-                match self.read_buf.position_elem(&b'\n') {
+                self.read_buf.extend(buf[..size].iter().map(|x| *x));
+                match self.read_buf.iter().position(|x| x == &b'\n') {
                     Some(pos) => {
                         let mut rest = self.read_buf.split_off(pos);
                         rest.remove(0);
