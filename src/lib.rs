@@ -1,85 +1,85 @@
 //! A Hamelin process-hosting backend.
-#![feature(collections, io, old_io, old_path)]
+#![feature(collections, io)]
 
 extern crate mio;
 extern crate nix;
 
 use std::borrow::ToOwned;
+use std::ffi::OsStr;
 use std::io::{Error, ErrorKind, Result};
 use std::io::ErrorKind::{Other, TimedOut};
-use std::old_io::{IoError, IoErrorKind, Writer};
-use std::old_io::process::{Command, Process};
-use std::old_path::BytesContainer;
-use std::os::unix::prelude::*;
+use std::os::unix::io::AsRawFd;
+use std::process::{Child, Command};
 use std::str::from_utf8;
-use mio::{FromFd, TryRead, TryWrite, PipeReader};
+use mio::{Buf, MutBuf, TryRead, TryWrite};
+use mio::unix::{FromRawFd, PipeReader};
 use nix::fcntl::{O_NONBLOCK, O_CLOEXEC, fcntl};
 use nix::fcntl::FcntlArg::F_SETFL;
 use nix::unistd::close;
 
 /// A Hamelin daemon.
 pub struct Hamelin {
-    process: String,
+    child: String,
     args: Option<Vec<String>>,
 }
 
 impl Hamelin {
-    /// Constructs a Hamelin daemon from the process and optionally arguments.
-    pub fn new(process: &str, args: Option<&[String]>) -> Hamelin {
-        Hamelin { 
-            process: process.to_owned(), 
+    /// Constructs a Hamelin daemon from the child and optionally arguments.
+    pub fn new(child: &str, args: Option<&[String]>) -> Hamelin {
+        Hamelin {
+            child: child.to_owned(),
             args: args.map(|s| s.to_owned()),
         }
     }
 
     /// Spawns a Hamelin server from the daemon.
     pub fn spawn(&self) -> Result<HamelinGuard> {
-        let client_str = format!("{} ({:?})", self.process, self.args);
-        let mut cmd = Command::new(&self.process);
-        cmd.env_set_all(&[("H-VERSION", "hamelin.rs"),
-                          ("H-TYPE", "HAMELIN.RS-GENERIC-0.1"),
-                          ("H-CLIENT", &client_str)]);
+        let client_str = format!("{} ({:?})", self.child, self.args);
+        let mut cmd = Command::new(&self.child);
+        /*[("H-VERSION", "hamelin.rs"),
+         ("H-TYPE", "HAMELIN.RS-GENERIC-0.1"),
+         ("H-CLIENT", &client_str)])*/
         if let Some(ref args) = self.args {
             cmd.args(args);
         }
-        Ok(HamelinGuard::new(try!(cmd.spawn().map_err(convert_io_error))))
+        Ok(HamelinGuard::new(try!(cmd.spawn())))
     }
 
     /// Spawns a Hamelin server from the daemon using the specified environment variables.
-    pub fn spawn_with_env<T, U>(&self, env: &[(T, U)]) -> Result<HamelinGuard>
-        where T: BytesContainer, U: BytesContainer {
-        let mut cmd = Command::new(&self.process);
-        cmd.env_set_all(env);
+    pub fn spawn_with_env<K, V>(&self, env: &[(K, V)]) -> Result<HamelinGuard>
+        where K: AsRef<OsStr>, V: AsRef<OsStr> {
+        let mut cmd = Command::new(&self.child);
+        //cmd.env_set_all(env);
         cmd.env("H-VERSION", "hamelin.rs");
         if let Some(ref args) = self.args {
             cmd.args(args);
         }
-        Ok(HamelinGuard::new(try!(cmd.spawn().map_err(convert_io_error))))
+        Ok(HamelinGuard::new(try!(cmd.spawn())))
     }
 }
 
 /// A Hamelin server.
 pub struct HamelinGuard {
-    process: Process,
+    child: Child,
     alr: AsyncLineReader,
 }
 
 impl HamelinGuard {
-    /// Creates a new Hamelin server from the specified process.
-    pub fn new(process: Process) -> HamelinGuard { 
-        let pipe = process.stdout.as_ref().map(|s| s.clone()).unwrap();
+    /// Creates a new Hamelin server from the specified child process.
+    pub fn new(child: Child) -> HamelinGuard {
+        let pipe = child.stdout.as_ref().map(|s| s.clone()).unwrap();
         let fd = pipe.as_raw_fd();
         fcntl(fd, F_SETFL(O_NONBLOCK | O_CLOEXEC)).unwrap();
         HamelinGuard {
-            process: process,
-            alr: AsyncLineReader::new(FromFd::from_fd(fd)),
+            child: child,
+            alr: AsyncLineReader::new(FromRawFd::from_raw_fd(fd)),
         }
     }
 
     /// Writes a line to the server's stdin.
-    pub fn write_line(&mut self, line: &str) -> Result<()> { 
-        self.process.stdin.as_mut().map(|mut s| s.write_line(line)).unwrap()
-            .map_err(convert_io_error)
+    pub fn write_line(&mut self, line: &str) -> Result<()> {
+        self.child.stdin.as_mut().map(|mut s| s.write_line(line)).unwrap()
+
     }
 
     /// Reads a line asynchronously from the server's stdout.
@@ -89,24 +89,19 @@ impl HamelinGuard {
 
     /// Closes the server's stdin.
     pub fn eof(&mut self) -> Result<()> {
-        self.process.stdin.as_ref().map(|s| close(s.as_raw_fd())).unwrap().map_err(|_| 
+        self.child.stdin.as_ref().map(|s| close(s.as_raw_fd())).unwrap().map_err(|_|
             Error::new(Other, "Failed to close stdin.")
         )
     }
 
     /// Awaits the completion of the server.
     pub fn wait(&mut self) -> Result<()> {
-        self.process.wait().map(|_| ()).map_err(convert_io_error)
+        self.child.wait().map(|_| ())
     }
 
     /// Sends a kill signal to the server.
     pub fn kill(&mut self) -> Result<()> {
-        try!(self.process.signal_exit().map_err(convert_io_error));
-        self.process.set_timeout(Some(1000));
-        if let Ok(_) = self.process.wait() {
-            return Ok(())
-        }
-        self.process.signal_kill().map_err(convert_io_error)
+        self.child.kill()
     }
 }
 
@@ -130,7 +125,7 @@ impl AsyncLineReader {
             Ok(None) => {
                 return Err(Error::new(TimedOut, "Reading would've blocked."))
             },
-            Ok(Some(size)) => {  
+            Ok(Some(size)) => {
                 self.buf.extend(buf[..size].iter().map(|x| *x));
                 match self.buf.iter().position(|x| x == &b'\n') {
                     Some(pos) => {
@@ -140,7 +135,7 @@ impl AsyncLineReader {
                         self.buf = rest;
                         return Ok(result);
                     }
-                    None => { 
+                    None => {
                         return Err(Error::new(TimedOut, "Reading would've blocked."))
                     }
                 }
@@ -150,12 +145,12 @@ impl AsyncLineReader {
     }
 }
 
-pub struct AsyncBufStream<T: TryRead + TryWrite> {
+pub struct AsyncBufStream<T: Buf + MutBuf + TryRead + TryWrite> {
     pub stream: T,
     read_buf: Vec<u8>
 }
 
-impl<T: TryRead + TryWrite> AsyncBufStream<T> {
+impl<T: Buf + MutBuf + TryRead + TryWrite> AsyncBufStream<T> {
     pub fn new(stream: T) -> AsyncBufStream<T> {
         AsyncBufStream { stream: stream, read_buf: Vec::new() }
     }
@@ -174,7 +169,7 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
         match self.stream.read_slice(&mut buf) {
             Ok(None) => Err(Error::new(TimedOut, "Reading would've blocked.")),
             Ok(Some(0)) => Err(Error::new(TimedOut, "Reading would've blocked.")),
-            Ok(Some(size)) => {  
+            Ok(Some(size)) => {
                 self.read_buf.extend(buf[..size].iter().map(|x| *x));
                 match self.read_buf.iter().position(|x| x == &b'\n') {
                     Some(pos) => {
@@ -184,7 +179,7 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
                         self.read_buf = rest;
                         return Ok(result);
                     }
-                    None => { 
+                    None => {
                         return Err(Error::new(TimedOut, "Reading would've blocked."))
                     }
                 }
@@ -194,35 +189,8 @@ impl<T: TryRead + TryWrite> AsyncBufStream<T> {
     }
 
     pub fn write_line(&mut self, s: &str) -> Result<()> {
-        match self.stream.write_slice(&s.as_bytes()) {
-            Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.")),
-            Ok(Some(0)) => Err(Error::new(Other, "End of File reached.")),
-            Ok(Some(_)) => {  
-                match self.stream.write_slice(b"\n") {
-                    Ok(None) => Err(Error::new(TimedOut, "Writing would've blocked.")),
-                    Ok(_) => Ok(()),
-                    Err(_) => Err(Error::new(TimedOut, "Writing would've blocked."))
-                }
-            }
-            Err(_) => Err(Error::new(TimedOut, "Writing would've blocked."))   
-        }
+        self.stream.write_slice(&s.as_bytes());
+        self.stream.write_slice(b"\n");
+        Ok(())
     }
-}
-
-fn convert_io_error(e: IoError) -> Error {
-    Error::new(match e.kind {
-        IoErrorKind::FileNotFound => ErrorKind::NotFound,
-        IoErrorKind::PermissionDenied => ErrorKind::PermissionDenied,
-        IoErrorKind::ConnectionRefused => ErrorKind::ConnectionRefused,
-        IoErrorKind::ConnectionReset => ErrorKind::ConnectionReset,
-        IoErrorKind::ConnectionAborted => ErrorKind::ConnectionAborted,
-        IoErrorKind::NotConnected => ErrorKind::NotConnected,
-        IoErrorKind::BrokenPipe => ErrorKind::BrokenPipe,
-        IoErrorKind::PathAlreadyExists => ErrorKind::AlreadyExists,
-        IoErrorKind::PathDoesntExist => ErrorKind::NotFound,
-        IoErrorKind::InvalidInput => ErrorKind::InvalidInput,
-        IoErrorKind::TimedOut => ErrorKind::TimedOut,
-        IoErrorKind::ShortWrite(0) => ErrorKind::WriteZero,
-        _ => ErrorKind::Other
-    }, e.desc)
 }
